@@ -184,4 +184,7 @@ pyrightconfig.json
 *.duckdb
 
 # Astro/Airflow local environment files
-.astro/
+.astro
+
+# Google Cloud credentials
+gcp-key.json

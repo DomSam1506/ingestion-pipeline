@@ -3,6 +3,8 @@ import polars as pl
 import os
 import time
 from datetime import datetime
+from google.cloud import storage
+import io
 
 def fetch_historical_weather(lat: float, lon: float, start_date: str, end_date: str):
     """Fetches highly detailed hourly weather data from Open-Meteo."""
@@ -32,8 +34,8 @@ def fetch_historical_weather(lat: float, lon: float, start_date: str, end_date: 
         print(f"  -> API Extraction Failed: {e}")
         return None
 
-def process_and_save(json_data, city_name: str, batch_timestamp: str):
-    """Converts JSON to Polars, enforces a wide schema, and saves as Parquet."""
+def process_and_upload_to_gcs(json_data, city_name: str, batch_timestamp: str, bucket_name: str):
+    """Converts JSON to Polars, enforces schema, and streams directly to GCP Storage."""
     
     hourly_data = json_data.get("hourly", {})
     if not hourly_data:
@@ -58,16 +60,28 @@ def process_and_save(json_data, city_name: str, batch_timestamp: str):
     # Inject our metadata column
     df = df.with_columns(pl.lit(city_name).alias("city"))
     
-    # Save to Parquet using the batch timestamp to keep file names organized
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    file_name = f"weather_{city_name.lower()}_{batch_timestamp}.parquet"
-    file_path = os.path.join(current_dir, file_name)
+    # Dynamic naming for Idempotency (Partitioning by city)
+    file_name = f"raw/city={city_name.lower()}/weather_{batch_timestamp}.parquet"
     
-    df.write_parquet(file_path)
-    print(f"  -> Successfully processed {df.height} rows. Saved to {file_name}")
+    # Initialize GCP Client 
+    storage_client = storage.Client()
+    bucket = storage_client.bucket(bucket_name)
+    blob = bucket.blob(file_name)
+    
+    # 4. Stream Polars DataFrame directly into GCS memory as bytes
+    print(f"  -> Streaming data to GCS Lake: {file_name}")
+    buffer = io.BytesIO()
+    df.write_parquet(buffer)
+    
+    buffer.seek(0)
+    
+    blob.upload_from_file(buffer, content_type="application/octet-stream")
+        
+    print(f"  -> Successfully uploaded {df.height} rows for {city_name}!")
 
 if __name__ == "__main__":
-    # Dictionary of target cities to scale up our data volume
+    TARGET_BUCKET = "de-portfolio-lake-dus-2026"
+    
     CITIES = {
         "Vancouver": {"lat": 49.26, "lon": -122.95},
         "Toronto":   {"lat": 43.70, "lon": -79.42},
@@ -77,7 +91,7 @@ if __name__ == "__main__":
     }
     
     start_date = "2021-01-01"
-    end_date = "2023-12-31"
+    end_date = "2024-12-31"
     
     # Generate one timestamp for the whole batch run so the 5 files group nicely
     batch_ts = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -90,7 +104,7 @@ if __name__ == "__main__":
         raw_json = fetch_historical_weather(coords["lat"], coords["lon"], start_date, end_date)
         
         if raw_json:
-            process_and_save(raw_json, city_name=city, batch_timestamp=batch_ts)
+            process_and_upload_to_gcs(raw_json, city, batch_ts, TARGET_BUCKET)
             
         # Rate Limiting: Pause for 2 seconds before hitting the API again
         time.sleep(2) 
