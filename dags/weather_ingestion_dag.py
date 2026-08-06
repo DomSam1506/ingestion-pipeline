@@ -15,7 +15,7 @@ CITIES = {
 }
 
 @dag(
-    dag_id="gcs_weather_ingestion_dynamic",
+    dag_id="meteo_weather_ingestion",
     start_date=datetime(2026, 6, 1),
     schedule="@daily",
     catchup=False,
@@ -23,14 +23,14 @@ CITIES = {
 )
 def weather_pipeline():
 
-    # 1. Define our Start and End structural nodes
-    start_pipeline = EmptyOperator(task_id="start_pipeline")
-    end_pipeline = EmptyOperator(task_id="end_pipeline")
+    
+    start = EmptyOperator(task_id="start")
+    end= EmptyOperator(task_id="end")
 
-    # Fetch variables (Make sure your UI variables are formatted exactly as YYYY-MM-DD)
-    bucket_name = Variable.get("gcp_bucket_name", default_var="YOUR_BUCKET_NAME_HERE")
-    start_date = Variable.get("weather_start_date", default_var="2021-01-01")
-    end_date = Variable.get("weather_end_date", default_var="2023-12-31")
+    # Fetch variables
+    bucket_name = Variable.get("gcp_bucket_name")
+    start_date = Variable.get("weather_start_date")
+    end_date = Variable.get("weather_end_date")
 
     # 2. Generate dynamic tasks
     for city, coords in CITIES.items():
@@ -57,7 +57,7 @@ def weather_pipeline():
 
         # 3. Wire up the dependencies using bitshift operators
         # This forces the graph to start at the empty node, branch out to all cities, then merge at the end
-        start_pipeline >> city_task >> end_pipeline
+        start >> city_task >> end
 
 # Instantiate the DAG
 weather_pipeline()
