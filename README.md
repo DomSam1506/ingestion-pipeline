@@ -34,11 +34,17 @@ The Solution: Leveraged Polars to explicitly define and cast the schema (e.g., p
 📁 Repository Structure
 
 ├── dags/
+
 │   └── weather_ingestion_dag.py    # Airflow DAG defining dynamic tasks and pools
+
 ├── include/
+
 │   └── extract_and_stage.py        # Core Polars & GCP boto3 extraction logic
+
 ├── dbt_transform/                  # (In Progress) Scaffold for downstream dimensional modeling
+
 ├── .env                            # Local environment variables (Git-ignored)
+
 └── requirements.txt                # Project dependencies (Polars, DuckDB, GCS)
 
 
